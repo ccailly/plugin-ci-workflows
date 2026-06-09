@@ -599,7 +599,7 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
       - name: "Publish test summary results"
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.collect-reports.outputs.ctrf-exists == 'true' }}
         uses: "ctrf-io/github-test-reporter@v1"
         with:
           report-path: "ctrf/ctrf-report.json"

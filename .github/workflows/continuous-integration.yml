@@ -579,7 +579,7 @@ jobs:
             -e E2E_BASE_URL=http://localhost:8090 \
             --network "container:glpi-test-app" \
             "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-            npx playwright test --project="plugin:${{ inputs.plugin-key }}" --workers=2 --reporter=html,playwright-ctrf-json-reporter,dot
+            npx playwright test --project="plugin:${{ inputs.plugin-key }}" --reporter=html,playwright-ctrf-json-reporter,dot
       - name: "Check for PHP errors"
         if: ${{ !cancelled() }}
         run: |

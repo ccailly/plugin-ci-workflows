@@ -517,9 +517,9 @@ jobs:
           path: |
             ${{ env.APP_CONTAINER_HOME }}/.composer/cache/
             ${{ env.APP_CONTAINER_HOME }}/.npm/_cacache/
-          key: "app_home_deps-8.5-${{ hashFiles('composer.lock', 'package-lock.json', 'plugins/${{ inputs.plugin-key }}/composer.lock', 'plugins/${{ inputs.plugin-key }}/package-lock.json') }}"
+          key: "app_home_deps-${{ inputs.php-version }}-${{ hashFiles('composer.lock', 'package-lock.json', 'plugins/${{ inputs.plugin-key }}/composer.lock', 'plugins/${{ inputs.plugin-key }}/package-lock.json') }}"
           restore-keys: |
-            app_home_deps-8.5-
+            app_home_deps-${{ inputs.php-version }}-
             app_home_deps-
       - name: "Initialize containers"
         run: |
@@ -598,6 +598,15 @@ jobs:
           path: "playwright-report/"
           retention-days: 30
           if-no-files-found: ignore
+      - name: "Detect CTRF report"
+        id: collect-reports
+        if: ${{ !cancelled() }}
+        run: |
+          if [[ -f ctrf/ctrf-report.json ]]; then
+            echo "ctrf-exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ctrf-exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: "Publish test summary results"
         if: ${{ !cancelled() && steps.collect-reports.outputs.ctrf-exists == 'true' }}
         uses: "ctrf-io/github-test-reporter@v1"

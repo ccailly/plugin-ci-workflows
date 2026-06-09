@@ -491,7 +491,7 @@ jobs:
     env:
       COMPOSE_FILE: ".github/actions/docker-compose-app.yml:.github/actions/docker-compose-services.yml"
       APPLICATION_ROOT: "${{ github.workspace }}"
-      DB_IMAGE: "githubactions-mariadb:${{ inputs.db-image }}"
+      DB_IMAGE: "githubactions-${{ inputs.db-image }}"
       PHP_IMAGE: "githubactions-php-apache:${{ inputs.php-version }}"
       UPDATE_FILES_ACL: true
       # GLPI core branch to test the plugin against (11.0.x line).

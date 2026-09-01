@@ -494,12 +494,14 @@ jobs:
       DB_IMAGE: "githubactions-${{ inputs.db-image }}"
       PHP_IMAGE: "githubactions-php-apache:${{ inputs.php-version }}"
       UPDATE_FILES_ACL: true
-      # GLPI core branch to test the plugin against (11.0.x line).
-      GLPI_BRANCH: "11.0/bugfixes"
     steps:
       - name: "Set env"
+        env:
+          GLPI_VERSION: "${{ inputs.glpi-version }}"
         run: |
           echo "APP_CONTAINER_HOME=${{ runner.temp }}/app_home" >> $GITHUB_ENV
+          # `glpi-version` is "X.Y.x"; the matching core branch is "X.Y/bugfixes".
+          echo "GLPI_BRANCH=${GLPI_VERSION%.x}/bugfixes" >> "$GITHUB_ENV"
       - name: "Checkout GLPI core"
         uses: "actions/checkout@v6"
         with:
@@ -517,12 +519,16 @@ jobs:
           path: |
             ${{ env.APP_CONTAINER_HOME }}/.composer/cache/
             ${{ env.APP_CONTAINER_HOME }}/.npm/_cacache/
-          key: "app_home_deps-${{ inputs.php-version }}-${{ hashFiles('composer.lock', 'package-lock.json', 'plugins/${{ inputs.plugin-key }}/composer.lock', 'plugins/${{ inputs.plugin-key }}/package-lock.json') }}"
+          key: "app_home_deps-${{ inputs.php-version }}-${{ hashFiles('composer.lock', 'package-lock.json', format('plugins/{0}/composer.lock', inputs.plugin-key), format('plugins/{0}/package-lock.json', inputs.plugin-key)) }}"
           restore-keys: |
             app_home_deps-${{ inputs.php-version }}-
             app_home_deps-
       - name: "Initialize containers"
         run: |
+          if [[ ! -f ".github/actions/docker-compose-app.yml" ]]; then
+            echo "::error::GLPI branch '${{ env.GLPI_BRANCH }}' (glpi-version '${{ inputs.glpi-version }}') does not provide the Playwright E2E CI infrastructure."
+            exit 1
+          fi
           .github/actions/init_containers-start.sh
       - name: "Show versions"
         run: |
@@ -568,7 +574,7 @@ jobs:
         # using the Playwright version pinned in GLPI core's lockfile.
         run: |
           docker compose exec -T app bin/console config:set url_base http://localhost:8090 --env=e2e_testing
-          PLAYWRIGHT_VERSION="$(docker compose exec -T app jq -r '.packages["node_modules/@playwright/test"].version' package-lock.json | tr -d '\r')"
+          PLAYWRIGHT_VERSION="$(docker compose exec -T app node -p "require('@playwright/test/package.json').version" | tr -d '\r')"
           # `--network container:glpi-test-app` shares the app container's network stack, so
           # `localhost:8090` reaches GLPI's e2e server without publishing any port (the CI
           # compose, unlike the local dev one, does not expose 8090 on the host).

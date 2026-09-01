@@ -460,17 +460,29 @@ jobs:
       - name: "Detect E2E specs"
         id: "detect"
         shell: "bash"
+        env:
+          GLPI_VERSION: "${{ inputs.glpi-version }}"
         run: |
           # Mirror the glob used by GLPI core's playwright.config.ts
           # (`plugins/*/tests/e2e/**/*.spec.ts`): the `plugin:<key>` project only
           # exists when the plugin ships E2E spec files under `tests/e2e/`.
-          if [[ -n "$(find tests/e2e -name '*.spec.ts' 2>/dev/null | head -n 1)" ]]; then
-            echo "has-e2e-tests=true" >> "$GITHUB_OUTPUT"
-            echo "✅ E2E specs found, Playwright tests will run."
-          else
+          if [[ -z "$(find tests/e2e -name '*.spec.ts' 2>/dev/null | head -n 1)" ]]; then
             echo "has-e2e-tests=false" >> "$GITHUB_OUTPUT"
             echo "ℹ️ No E2E specs found, Playwright tests will be skipped."
+            exit 0
           fi
+          GLPI_BRANCH="${GLPI_VERSION%.x}/bugfixes"
+          HTTP_CODE="$(curl -sS -o /dev/null -w '%{http_code}' "https://raw.githubusercontent.com/glpi-project/glpi/${GLPI_BRANCH}/playwright.config.ts" || true)"
+          if [[ "$HTTP_CODE" == "404" ]]; then
+            echo "has-e2e-tests=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ GLPI branch \"${GLPI_BRANCH}\" ships no Playwright infrastructure, E2E tests will be skipped."
+            exit 0
+          elif [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::Could not determine whether GLPI branch \"${GLPI_BRANCH}\" provides Playwright (HTTP ${HTTP_CODE})."
+            exit 1
+          fi
+          echo "has-e2e-tests=true" >> "$GITHUB_OUTPUT"
+          echo "✅ E2E specs found, Playwright tests will run."
 
   playwright:
     needs: "detect-e2e-tests"
@@ -525,10 +537,6 @@ jobs:
             app_home_deps-
       - name: "Initialize containers"
         run: |
-          if [[ ! -f ".github/actions/docker-compose-app.yml" ]]; then
-            echo "::error::GLPI branch '${{ env.GLPI_BRANCH }}' (glpi-version '${{ inputs.glpi-version }}') does not provide the Playwright E2E CI infrastructure."
-            exit 1
-          fi
           .github/actions/init_containers-start.sh
       - name: "Show versions"
         run: |
@@ -565,8 +573,9 @@ jobs:
           docker compose exec -T app bin/console plugin:install --ansi --no-interaction --username=glpi --env=e2e_testing ${{ inputs.plugin-key }}
           docker compose exec -T app bin/console plugin:activate --ansi --no-interaction --env=e2e_testing ${{ inputs.plugin-key }}
       - name: "Type-check E2E tests"
-        if: ${{ !cancelled() }}
-        run: docker compose exec -T app npx tsc -p tsconfig.json --noEmit
+        if: ${{ !cancelled() && hashFiles(format('plugins/{0}/tsconfig.json', inputs.plugin-key)) != '' }}
+        run: |
+          docker compose exec -T app npx tsc -p plugins/${{ inputs.plugin-key }}/tsconfig.json --noEmit
       - name: "Run Playwright tests"
         if: ${{ !cancelled() }}
         # Run the E2E tests exactly like local dev (see core `Makefile` target `playwright`):
@@ -600,7 +609,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: "actions/upload-artifact@v7"
         with:
-          name: "playwright-report-${{ inputs.plugin-key }}"
+          name: "playwright-report-${{ inputs.plugin-key }}-glpi${{ inputs.glpi-version }}-php${{ inputs.php-version }}"
           path: "playwright-report/"
           retention-days: 30
           if-no-files-found: ignore
